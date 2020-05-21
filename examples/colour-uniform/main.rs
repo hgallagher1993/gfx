@@ -36,6 +36,8 @@ struct Dimensions<T> {
     height: T,
 }
 
+use core::num::{NonZeroU8, NonZeroU16};
+
 use std::cell::RefCell;
 use std::io::Cursor;
 use std::mem::{size_of, ManuallyDrop};
@@ -101,8 +103,10 @@ const QUAD: [Vertex; 6] = [
 
 const COLOR_RANGE: i::SubresourceRange = i::SubresourceRange {
     aspects: f::Aspects::COLOR,
-    levels: 0 .. 1,
-    layers: 0 .. 1,
+    base_mip_level: 0,
+    levels: unsafe { Some(NonZeroU8::new_unchecked(1)) },
+    base_layer: 0,
+    layers: unsafe { Some(NonZeroU16::new_unchecked(1)) },
 };
 
 struct RendererState<B: Backend> {
@@ -1128,7 +1132,8 @@ impl<B: Backend> ImageState<B> {
                     image_layers: i::SubresourceLayers {
                         aspects: f::Aspects::COLOR,
                         level: 0,
-                        layers: 0 .. 1,
+                        base_layer: 0,
+                        layers: NonZeroU16::new(1),
                     },
                     image_offset: i::Offset { x: 0, y: 0, z: 0 },
                     image_extent: i::Extent {

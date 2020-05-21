@@ -9,6 +9,7 @@ use crate::{
     pso::{Comparison, Rect},
 };
 use std::{f32, hash, ops::Range};
+use core::num::{NonZeroU8, NonZeroU16};
 
 /// Dimension size.
 pub type Size = u32;
@@ -205,7 +206,7 @@ pub enum LayerError {
     /// The source image kind doesn't support array slices.
     NotExpected(Kind),
     /// Selected layers are outside of the provided range.
-    OutOfBounds(Range<Layer>),
+    OutOfBounds((Layer, Layer)),
 }
 
 impl std::fmt::Display for LayerError {
@@ -214,10 +215,10 @@ impl std::fmt::Display for LayerError {
             LayerError::NotExpected(kind) => {
                 write!(fmt, "Kind {{{:?}}} does not support arrays", kind)
             }
-            LayerError::OutOfBounds(layers) => write!(
+            LayerError::OutOfBounds((base_layer, layer_level)) => write!(
                 fmt,
                 "Out of bounds layers {} .. {}",
-                layers.start, layers.end
+                base_layer, base_layer + layer_level
             ),
         }
     }
@@ -649,8 +650,10 @@ pub struct SubresourceLayers {
     pub aspects: format::Aspects,
     /// Selected mipmap level
     pub level: Level,
+    /// Base Array Layer
+    pub base_layer: Layer,
     /// Included array levels
-    pub layers: Range<Layer>,
+    pub layers: Option<NonZeroU16>,
 }
 
 /// A subset of resources contained within an image.
@@ -659,10 +662,14 @@ pub struct SubresourceLayers {
 pub struct SubresourceRange {
     /// Included aspects: color/depth/stencil
     pub aspects: format::Aspects,
+    /// The first mipmap level accessible to the view
+    pub base_mip_level: Level,
     /// Included mipmap levels
-    pub levels: Range<Level>,
+    pub levels: Option<NonZeroU8>,
+    /// Base Array Layer
+    pub base_layer: Layer,
     /// Included array levels
-    pub layers: Range<Layer>,
+    pub layers: Option<NonZeroU16>,
 }
 
 /// Image format properties.

@@ -20,6 +20,7 @@ use hal::{
     WorkGroupCount,
 };
 
+use core::num::NonZeroU16;
 use std::{borrow::Borrow, cmp, fmt, iter, mem, ops::Range, ptr, sync::Arc};
 
 use winapi::{
@@ -1506,8 +1507,11 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
                             range: image::SubresourceRange {
                                 aspects: Aspects::COLOR,
                                 levels: attachment.mip_levels.0 .. attachment.mip_levels.1,
-                                layers: attachment.layers.0 + clear_rect.layers.start
-                                    .. attachment.layers.0 + clear_rect.layers.end,
+                                base_layer: attachment.layers.0 + clear_rect.layers.start,
+                                layers: NonZeroU16::new(
+                                    attachment.layers.0 + clear_rect.layers.end -
+                                    attachment.layers.0 + clear_rect.layers.start
+                                ),
                             },
                         };
                         let rtv = rtv_pool.alloc_handle();
@@ -1551,8 +1555,11 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
                                     Aspects::empty()
                                 },
                                 levels: attachment.mip_levels.0 .. attachment.mip_levels.1,
-                                layers: attachment.layers.0 + clear_rect.layers.start
-                                    .. attachment.layers.0 + clear_rect.layers.end,
+                                base_layer: attachment.layers.0 + clear_rect.layers.start,
+                                layers: NonZeroU16::new(
+                                    attachment.layers.0 + clear_rect.layers.end -
+                                    attachment.layers.0 + clear_rect.layers.start
+                                ),
                             },
                         };
                         let dsv = dsv_pool.alloc_handle();
@@ -1601,7 +1608,7 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
                     src.resource.as_mut_ptr(),
                     src.calc_subresource(
                         r.src_subresource.level as UINT,
-                        r.src_subresource.layers.start as UINT + layer,
+                        r.src_subresource.layers.unwrap().get() as UINT + layer,
                         0,
                     ),
                     dst.resource.as_mut_ptr(),
@@ -1670,7 +1677,8 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
             range: image::SubresourceRange {
                 aspects: format::Aspects::COLOR, // TODO
                 levels: 0 .. src.descriptor.MipLevels as _,
-                layers: 0 .. src.kind.num_layers(),
+                base_layer: 0,
+                layers: NonZeroU16::new(src.kind.num_layers()),
             },
         })
         .unwrap();
@@ -1750,7 +1758,7 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
             let list = instances.entry(key).or_insert(Vec::new());
 
             for i in 0 .. num_layers {
-                let src_layer = r.src_subresource.layers.start + i;
+                let src_layer = r.src_subresource.base_layer + i;
                 // Screen space triangle blitting
                 let data = {
                     // Image extents, layers are treated as depth
@@ -2264,7 +2272,7 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
         for region in regions {
             let r = region.borrow();
             debug_assert_eq!(
-                r.src_subresource.layers.len(),
+                r.src_subresource.layers.unwrap().get() - r.src_subresource.base_layer,
                 r.dst_subresource.layers.len()
             );
             let src_box = d3d12::D3D12_BOX {

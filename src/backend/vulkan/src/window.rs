@@ -8,6 +8,8 @@ use std::{
     time::Instant,
 };
 
+use core::num::{NonZeroU8, NonZeroU16};
+
 use ash::{extensions::khr, version::DeviceV1_0 as _, vk};
 use hal::{format::Format, window as w};
 use smallvec::SmallVec;
@@ -470,8 +472,10 @@ impl w::PresentationSurface<Backend> for Surface {
                             hal::format::Swizzle::NO,
                             hal::image::SubresourceRange {
                                 aspects: hal::format::Aspects::COLOR,
-                                layers: 0 .. 1,
-                                levels: 0 .. 1,
+                                base_mip_level: 0,
+                                levels: NonZeroU8::new(1),
+                                base_layer: 0,
+                                layers: NonZeroU16::new(1),
                             },
                         )
                         .unwrap();
@@ -524,8 +528,10 @@ impl w::PresentationSurface<Backend> for Surface {
                         view: frame.view,
                         range: hal::image::SubresourceRange {
                             aspects: hal::format::Aspects::COLOR,
-                            layers: 0 .. 1,
-                            levels: 0 .. 1,
+                            base_mip_level: 0,
+                            levels: NonZeroU8::new(1),
+                            base_layer: 0,
+                            layers: NonZeroU16::new(1),
                         },
                         owner: native::ImageViewOwner::Surface(FramebufferCachePtr(Arc::clone(
                             &frame.framebuffers.0,

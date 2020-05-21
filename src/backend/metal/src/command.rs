@@ -3111,7 +3111,7 @@ impl com::CommandBuffer<Backend> for CommandBuffer {
 
             // layer count must be equal in both subresources
             debug_assert_eq!(
-                r.src_subresource.layers.len(),
+                r.src_subresource.layers.unwrap().get() - r.src_subresource.base_layer,
                 r.dst_subresource.layers.len()
             );
             debug_assert_eq!(r.src_subresource.aspects, r.dst_subresource.aspects);

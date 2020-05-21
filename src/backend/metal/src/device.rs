@@ -77,6 +77,8 @@ use std::sync::{
 };
 use std::{cmp, iter, mem, ptr, thread, time};
 
+use core::num::NonZeroU16;
+
 const PUSH_CONSTANTS_DESC_SET: u32 = !0;
 const PUSH_CONSTANTS_DESC_BINDING: u32 = 0;
 const STRIDE_GRANULARITY: pso::ElemStride = 4; //TODO: work around?
@@ -2808,7 +2810,8 @@ impl hal::device::Device<Backend> for Device {
         let full_range = image::SubresourceRange {
             aspects: image.format_desc.aspects,
             levels: 0 .. raw.mipmap_level_count() as image::Level,
-            layers: 0 .. image.kind.num_layers(),
+            base_layer: 0,
+            layers: NonZeroU16::new(image.kind.num_layers()),
         };
         let mtl_type = if image.mtl_type == MTLTextureType::D2Multisample {
             if kind != image::ViewKind::D2 {

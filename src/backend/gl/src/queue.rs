@@ -732,11 +732,10 @@ impl CommandQueue {
                             data.image_layers.level as _,
                             data.image_offset.x,
                             data.image_offset.y,
-                            data.image_layers.layers.start as i32,
+                            data.image_layers.base_layer as i32,
                             data.image_extent.width as _,
                             data.image_extent.height as _,
-                            data.image_layers.layers.end as i32
-                                - data.image_layers.layers.start as i32,
+                            data.image_layers.layers.unwrap().get() as i32,
                             texture_format,
                             pixel_type,
                             data.buffer_offset as i32,

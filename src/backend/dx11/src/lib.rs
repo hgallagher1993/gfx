@@ -65,6 +65,8 @@ use parking_lot::{Condvar, Mutex};
 
 use std::{borrow::Borrow, cell::RefCell, fmt, mem, ops::Range, os::raw::c_void, ptr, sync::Arc};
 
+use core::num::NonZeroU16;
+
 macro_rules! debug_scope {
     ($context:expr, $($arg:tt)+) => ({
         #[cfg(debug_assertions)]
@@ -870,7 +872,8 @@ impl window::PresentationSurface<Backend> for Surface {
             range: image::SubresourceRange {
                 aspects: format::Aspects::COLOR,
                 levels: 0 .. 1,
-                layers: 0 .. 1,
+                base_layer: 0,
+                layers: NonZeroU16::new(1),
             },
         };
         let view = device.view_image_as_render_target(&view_info).unwrap();

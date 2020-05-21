@@ -113,18 +113,18 @@ pub fn map_subresource_layers(sub: &image::SubresourceLayers) -> vk::ImageSubres
     vk::ImageSubresourceLayers {
         aspect_mask: map_image_aspects(sub.aspects),
         mip_level: sub.level as _,
-        base_array_layer: sub.layers.start as _,
-        layer_count: (sub.layers.end - sub.layers.start) as _,
+        base_array_layer: sub.base_layer as _,
+        layer_count: sub.layers.unwrap().get() as _,
     }
 }
 
 pub fn map_subresource_range(range: &image::SubresourceRange) -> vk::ImageSubresourceRange {
     vk::ImageSubresourceRange {
         aspect_mask: map_image_aspects(range.aspects),
-        base_mip_level: range.levels.start as _,
-        level_count: (range.levels.end - range.levels.start) as _,
-        base_array_layer: range.layers.start as _,
-        layer_count: (range.layers.end - range.layers.start) as _,
+        base_mip_level: range.base_mip_level as _,
+        level_count: range.levels.unwrap().get() as _,
+        base_array_layer: range.base_layer as _,
+        layer_count: range.layers.unwrap().get() as _,
     }
 }
 

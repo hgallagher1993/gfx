@@ -10,6 +10,8 @@ use crate::{root_constants::RootConstant, Backend, MAX_VERTEX_BUFFERS};
 
 use std::{cell::UnsafeCell, collections::BTreeMap, fmt, ops::Range};
 
+use core::num::NonZeroU16;
+
 // ShaderModule is either a precompiled if the source comes from HLSL or
 // the SPIR-V module doesn't contain specialization constants or push constants
 // because they need to be adjusted on pipeline creation.
@@ -275,7 +277,8 @@ impl ImageBound {
         image::SubresourceRange {
             aspects,
             levels: 0 .. self.descriptor.MipLevels as _,
-            layers: 0 .. self.kind.num_layers(),
+            base_layer: 0,
+            layers: NonZeroU16::new(self.kind.num_layers()),
         }
     }
 

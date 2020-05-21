@@ -27,6 +27,9 @@ use winapi::{
     Interface,
 };
 
+use core::num::NonZeroU16;
+
+use auxil::spirv_cross_specialize_ast;
 use auxil::{ShaderStage, spirv_cross_specialize_ast};
 use hal::{
     self,
@@ -67,13 +70,13 @@ use native::{PipelineStateSubobject, Subobject};
 // Register space used for root constants.
 const ROOT_CONSTANT_SPACE: u32 = 0;
 
-const MEM_TYPE_MASK: u32 = 0x7;
-const MEM_TYPE_SHIFT: u32 = 3;
+const MEM_TYPE_MASK: u64 = 0x7;
+const MEM_TYPE_SHIFT: u64 = 3;
 
-const MEM_TYPE_UNIVERSAL_SHIFT: u32 = MEM_TYPE_SHIFT * MemoryGroup::Universal as u32;
-const MEM_TYPE_BUFFER_SHIFT: u32 = MEM_TYPE_SHIFT * MemoryGroup::BufferOnly as u32;
-const MEM_TYPE_IMAGE_SHIFT: u32 = MEM_TYPE_SHIFT * MemoryGroup::ImageOnly as u32;
-const MEM_TYPE_TARGET_SHIFT: u32 = MEM_TYPE_SHIFT * MemoryGroup::TargetOnly as u32;
+const MEM_TYPE_UNIVERSAL_SHIFT: u64 = MEM_TYPE_SHIFT * MemoryGroup::Universal as u64;
+const MEM_TYPE_BUFFER_SHIFT: u64 = MEM_TYPE_SHIFT * MemoryGroup::BufferOnly as u64;
+const MEM_TYPE_IMAGE_SHIFT: u64 = MEM_TYPE_SHIFT * MemoryGroup::ImageOnly as u64;
+const MEM_TYPE_TARGET_SHIFT: u64 = MEM_TYPE_SHIFT * MemoryGroup::TargetOnly as u64;
 
 pub const IDENTITY_MAPPING: UINT = 0x1688; // D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING
 
@@ -115,36 +118,32 @@ pub(crate) enum CommandSignature {
 
 /// Compile a single shader entry point from a HLSL text shader
 pub(crate) fn compile_shader(
-    stage: ShaderStage,
+    stage: pso::Stage,
     shader_model: hlsl::ShaderModel,
-    features: &hal::Features,
     entry: &str,
     code: &[u8],
 ) -> Result<native::Blob, d::ShaderError> {
-    let stage_str = match stage {
-        ShaderStage::Vertex => "vs",
-        ShaderStage::Fragment => "ps",
-        ShaderStage::Compute => "cs",
-        _ => unimplemented!(),
+    let stage_to_str = |stage, shader_model| {
+        let stage = match stage {
+            pso::Stage::Vertex => "vs",
+            pso::Stage::Fragment => "ps",
+            pso::Stage::Compute => "cs",
+            _ => unimplemented!(),
+        };
+
+        let model = match shader_model {
+            hlsl::ShaderModel::V5_0 => "5_0",
+            hlsl::ShaderModel::V5_1 => "5_1",
+            hlsl::ShaderModel::V6_0 => "6_0",
+            _ => unimplemented!(),
+        };
+
+        format!("{}_{}\0", stage, model)
     };
-    let model_str = match shader_model {
-        hlsl::ShaderModel::V5_0 => "5_0",
-        hlsl::ShaderModel::V5_1 => "5_1",
-        hlsl::ShaderModel::V6_0 => "6_0",
-        _ => unimplemented!(),
-    };
-    let full_stage = format!("{}_{}\0", stage_str, model_str);
 
     let mut shader_data = native::Blob::null();
     let mut error = native::Blob::null();
     let entry = ffi::CString::new(entry).unwrap();
-    let mut compile_flags = d3dcompiler::D3DCOMPILE_ENABLE_STRICTNESS;
-    if cfg!(debug_assertions) {
-        compile_flags |= d3dcompiler::D3DCOMPILE_DEBUG;
-    }
-    if features.contains(hal::Features::UNSIZED_DESCRIPTOR_ARRAY) {
-        compile_flags |= d3dcompiler::D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
-    }
     let hr = unsafe {
         d3dcompiler::D3DCompile(
             code.as_ptr() as *const _,
@@ -153,8 +152,8 @@ pub(crate) fn compile_shader(
             ptr::null(),
             ptr::null_mut(),
             entry.as_ptr() as *const _,
-            full_stage.as_ptr() as *const i8,
-            compile_flags,
+            stage_to_str(stage, shader_model).as_ptr() as *const i8,
+            1,
             0,
             shader_data.mut_void() as *mut *mut _,
             error.mut_void() as *mut *mut _,
@@ -414,14 +413,14 @@ impl Device {
         ast: &mut spirv::Ast<hlsl::Target>,
         shader_model: hlsl::ShaderModel,
         layout: &r::PipelineLayout,
-        stage: ShaderStage,
+        stage: pso::Stage,
         features: &hal::Features,
     ) -> Result<String, d::ShaderError> {
         let mut compile_options = hlsl::CompilerOptions::default();
         compile_options.shader_model = shader_model;
         compile_options.vertex.invert_y = !features.contains(hal::Features::NDC_Y_UP);
 
-        let stage_flag = stage.to_flag();
+        let stage_flag = stage.into();
         let root_constant_layout = layout
             .constants
             .iter()
@@ -455,7 +454,7 @@ impl Device {
     // Returns compiled shader blob and bool to indicate if the shader should be
     // destroyed after pipeline creation
     fn extract_entry_point(
-        stage: ShaderStage,
+        stage: pso::Stage,
         source: &pso::EntryPoint<B>,
         layout: &r::PipelineLayout,
         features: &hal::Features,
@@ -493,7 +492,6 @@ impl Device {
                         let shader = compile_shader(
                             stage,
                             shader_model,
-                            features,
                             &entry_point.name,
                             shader_code.as_bytes(),
                         )?;
@@ -506,13 +504,13 @@ impl Device {
     /// Create a shader module from HLSL with a single entry point
     pub fn create_shader_module_from_source(
         &self,
-        stage: ShaderStage,
+        stage: pso::Stage,
         hlsl_entry: &str,
         entry_point: &str,
         code: &[u8],
     ) -> Result<r::ShaderModule, d::ShaderError> {
         let mut shader_map = BTreeMap::new();
-        let blob = compile_shader(stage, hlsl::ShaderModel::V5_1, &self.features, hlsl_entry, code)?;
+        let blob = compile_shader(stage, hlsl::ShaderModel::V5_1, hlsl_entry, code)?;
         shader_map.insert(entry_point.into(), blob);
         Ok(r::ShaderModule::Compiled(shader_map))
     }
@@ -1797,7 +1795,7 @@ impl d::Device<B> for Device {
             }
         }
 
-        let build_shader = |stage: ShaderStage, source: Option<&pso::EntryPoint<'a, B>>| {
+        let build_shader = |stage: pso::Stage, source: Option<&pso::EntryPoint<'a, B>>| {
             let source = match source {
                 Some(src) => src,
                 None => return Ok(ShaderBc::None),
@@ -1808,15 +1806,15 @@ impl d::Device<B> for Device {
                 Ok((shader, false)) => Ok(ShaderBc::Borrowed(shader)),
                 Err(err) => Err(pso::CreationError::Shader(err)),
             }
-        };
+        };        
 
-        let vertex_buffers: Vec<pso::VertexBufferDesc> = Vec::new();
-        let attributes: Vec<pso::AttributeDesc> = Vec::new();
+        let vertex_buffers = Vec::new();
+        let attributes = Vec::new();
         let input_assembler = pso::InputAssemblerDesc::new(pso::Primitive::TriangleList);
         let (vertex_buffers, attributes, input_assembler, vs, gs, hs, ds, _, _) = match desc.primitive_assembler {
             pso::PrimitiveAssembler::Vertex {
-                buffers,
-                attributes,
+                ref buffers,
+                ref attributes,
                 ref input_assembler,
                 ref vertex,
                 ref tessellation,
@@ -1830,19 +1828,19 @@ impl d::Device<B> for Device {
 
                 (buffers, attributes, input_assembler, Some(vertex), geometry.as_ref(), hs, ds, None, None)
             },
-            pso::PrimitiveAssembler::Mesh {
+            pso::PrimitiveAssembler::Mesh { 
                 ref task,
                 ref mesh
              } => {
-                (&vertex_buffers[..], &attributes[..], &input_assembler, None, None, None, None, task.as_ref(), Some(mesh))
+                (&vertex_buffers, &attributes, &input_assembler, None, None, None, None, task.as_ref(), Some(mesh))
             },
         };
 
-        let vs = build_shader(ShaderStage::Vertex, vs)?;
-        let gs = build_shader(ShaderStage::Geometry, gs)?;
-        let hs = build_shader(ShaderStage::Domain, hs)?;
-        let ds = build_shader(ShaderStage::Hull, ds)?;
-        let ps = build_shader(ShaderStage::Fragment, desc.fragment.as_ref())?;
+        let vs = build_shader(pso::Stage::Vertex, vs)?;
+        let gs = build_shader(pso::Stage::Geometry, gs)?;
+        let hs = build_shader(pso::Stage::Domain, hs)?;
+        let ds = build_shader(pso::Stage::Hull, ds)?;
+        let ps = build_shader(pso::Stage::Fragment, desc.fragment.as_ref())?;
 
         // Rebind vertex buffers, see native.rs for more details.
         let mut vertex_bindings = [None; MAX_VERTEX_BUFFERS];
@@ -2079,7 +2077,6 @@ impl d::Device<B> for Device {
                 baked_states,
             })
         } else {
-            error!("Failed to build shader: {:x}", hr);
             Err(pso::CreationError::Other)
         }
     }
@@ -2090,7 +2087,7 @@ impl d::Device<B> for Device {
         _cache: Option<&()>,
     ) -> Result<r::ComputePipeline, pso::CreationError> {
         let (cs, cs_destroy) = Self::extract_entry_point(
-            ShaderStage::Compute,
+            pso::Stage::Compute,
             &desc.shader,
             desc.layout,
             &self.features,
@@ -3461,23 +3458,9 @@ impl d::Device<B> for Device {
         // Just drop
     }
 
-    unsafe fn destroy_descriptor_pool(&self, pool: r::DescriptorPool) {
-        let view_range = pool.heap_srv_cbv_uav.range_allocator.initial_range();
-        if view_range.start < view_range.end {
-            self.heap_srv_cbv_uav
-                .lock()
-                .unwrap()
-                .range_allocator
-                .free_range(view_range.clone());
-        }
-        let sampler_range = pool.heap_sampler.range_allocator.initial_range();
-        if sampler_range.start < sampler_range.end {
-            self.heap_sampler
-                .lock()
-                .unwrap()
-                .range_allocator
-                .free_range(sampler_range.clone());
-        }
+    unsafe fn destroy_descriptor_pool(&self, _pool: r::DescriptorPool) {
+        // Just drop
+        // Allocated descriptor sets don't need to be freed beforehand.
     }
 
     unsafe fn destroy_descriptor_set_layout(&self, _layout: r::DescriptorSetLayout) {
@@ -3612,30 +3595,6 @@ impl d::Device<B> for Device {
     unsafe fn set_descriptor_set_layout_name(
         &self,
         _descriptor_set_layout: &mut r::DescriptorSetLayout,
-        _name: &str,
-    ) {
-        // TODO
-    }
-
-    unsafe fn set_pipeline_layout_name(
-        &self,
-        _pipeline_layout: &mut r::PipelineLayout,
-        _name: &str,
-    ) {
-        // TODO
-    }
-
-    unsafe fn set_compute_pipeline_name(
-        &self,
-        _compute_pipeline: &mut r::ComputePipeline,
-        _name: &str,
-    ) {
-        // TODO
-    }
-
-    unsafe fn set_graphics_pipeline_name(
-        &self,
-        _graphics_pipeline: &mut r::GraphicsPipeline,
         _name: &str,
     ) {
         // TODO

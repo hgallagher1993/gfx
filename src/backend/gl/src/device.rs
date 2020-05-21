@@ -1478,20 +1478,20 @@ impl d::Device<B> for Device {
         range: i::SubresourceRange,
     ) -> Result<n::ImageView, i::ViewCreationError> {
         //TODO: check if `layers.end` covers all the layers
-        let level = range.levels.start;
-        assert_eq!(level + 1, range.levels.end);
+        let level = range.base_mip_level;
+        assert_eq!(level + 1, range.levels.unwrap().get());
         //assert_eq!(format, image.format);
         assert_eq!(swizzle, Swizzle::NO);
         //TODO: check format
         match image.kind {
             n::ImageKind::Renderbuffer { renderbuffer, .. } => {
-                if range.levels.start == 0 && range.layers.start == 0 {
+                if range.base_mip_level == 0 && range.base_layer == 0 {
                     Ok(n::ImageView::Renderbuffer(renderbuffer))
                 } else if level != 0 {
                     Err(i::ViewCreationError::Level(level)) //TODO
                 } else {
                     Err(i::ViewCreationError::Layer(i::LayerError::OutOfBounds(
-                        range.layers,
+                        (range.base_layer, range.layers.unwrap().get()),
                     )))
                 }
             }
@@ -1499,18 +1499,18 @@ impl d::Device<B> for Device {
                 texture, target, ..
             } => {
                 //TODO: check that `level` exists
-                if range.layers.start == 0 {
+                if range.base_layer == 0 {
                     Ok(n::ImageView::Texture(texture, target, level))
-                } else if range.layers.start + 1 == range.layers.end {
+                } else if range.base_layer + 1 == range.layers.unwrap().get() {
                     Ok(n::ImageView::TextureLayer(
                         texture,
                         target,
                         level,
-                        range.layers.start,
+                        range.base_layer,
                     ))
                 } else {
                     Err(i::ViewCreationError::Layer(i::LayerError::OutOfBounds(
-                        range.layers,
+                        (range.base_layer, range.layers.unwrap().get()),
                     )))
                 }
             }

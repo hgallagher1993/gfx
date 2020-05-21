@@ -30,6 +30,8 @@ use winapi::{
 
 use wio::com::ComPtr;
 
+use core::num::NonZeroU16;
+
 use std::{borrow::Borrow, cell::RefCell, fmt, mem, ops::Range, ptr, sync::Arc};
 
 use parking_lot::{Condvar, Mutex};
@@ -1601,7 +1603,8 @@ impl device::Device<Backend> for Device {
                     range: image::SubresourceRange {
                         aspects: format::Aspects::COLOR,
                         levels: mip .. (mip + 1),
-                        layers: 0 .. image.kind.num_layers(),
+                        base_layer: 0,
+                        layers: NonZeroU16::new(image.kind.num_layers()),
                     },
                 };
 
@@ -1622,7 +1625,8 @@ impl device::Device<Backend> for Device {
                 range: image::SubresourceRange {
                     aspects: format::Aspects::COLOR,
                     levels: 0 .. image.mip_levels,
-                    layers: 0 .. image.kind.num_layers(),
+                    base_layer: 0,
+                    layers: NonZeroU16::new(image.kind.num_layers()),
                 },
             };
 
@@ -1669,7 +1673,8 @@ impl device::Device<Backend> for Device {
                         range: image::SubresourceRange {
                             aspects: format::Aspects::COLOR,
                             levels: mip .. (mip + 1),
-                            layers: layer .. (layer + 1),
+                            base_layer: layer,
+                            layers: NonZeroU16::new(layer),
                         },
                     };
 
@@ -1695,7 +1700,8 @@ impl device::Device<Backend> for Device {
                         range: image::SubresourceRange {
                             aspects: format::Aspects::COLOR,
                             levels: mip .. (mip + 1),
-                            layers: layer .. (layer + 1),
+                            base_layer: layer,
+                            layers: NonZeroU16::new(layer),
                         },
                     };
 
@@ -2276,7 +2282,8 @@ impl device::Device<Backend> for Device {
             range: image::SubresourceRange {
                 aspects: format::Aspects::COLOR,
                 levels: 0 .. 1,
-                layers: 0 .. 1,
+                base_layer: layer,
+                layers: NonZeroU16::new(1),
             },
         };
         let rtv = self.view_image_as_render_target(&view_info).unwrap();

@@ -1,6 +1,7 @@
 #[cfg(feature = "glsl-to-spirv")]
 use glsl_to_spirv;
 
+use core::num::{NonZeroU8, NonZeroU16};
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::Read;
@@ -26,8 +27,10 @@ use crate::raw;
 
 const COLOR_RANGE: i::SubresourceRange = i::SubresourceRange {
     aspects: f::Aspects::COLOR,
-    levels: 0 .. 1,
-    layers: 0 .. 1,
+    base_mip_level: 0,
+    levels: unsafe { Some(NonZeroU8::new_unchecked(1)) },
+    base_layer: 0,
+    layers: unsafe { Some(NonZeroU16::new_unchecked(1)) },
 };
 
 pub struct FetchGuard<'a, B: hal::Backend> {
@@ -563,7 +566,8 @@ impl<B: hal::Backend> Scene<B> {
                             image_layers: i::SubresourceLayers {
                                 aspects: f::Aspects::COLOR,
                                 level: 0,
-                                layers: 0 .. 1,
+                                base_layer: 0,
+                                layers: NonZeroU16::new(1),
                             },
                             image_offset: i::Offset::ZERO,
                             image_extent: extent,
@@ -1672,7 +1676,8 @@ impl<B: hal::Backend> Scene<B> {
                 image_layers: i::SubresourceLayers {
                     aspects: f::Aspects::COLOR,
                     level: 0,
-                    layers: 0 .. 1,
+                    base_layer: 0,
+                    layers: NonZeroU16::new(1),
                 },
                 image_offset: i::Offset { x: 0, y: 0, z: 0 },
                 image_extent: i::Extent {
